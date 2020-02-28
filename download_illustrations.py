@@ -16,10 +16,8 @@ def mkdir_p(dir):
 def download_illustrations(
     illustrations_file, output_dir, start_index=0, max_count=None, thread_count=64
     ):
-    # Create output directory structure
+    # Create output directory.
     mkdir_p(output_dir)
-    for i in range(10):
-        mkdir_p('{}/{}'.format(output_dir, i))
 
     # Load ilustration ids.
     with open(illustrations_file) as f:
@@ -42,7 +40,7 @@ def download_illustrations(
 
     def download_img(img_id):
         # Get output image path and image url.
-        output_img_name = '{}/{}/{}.jpeg'.format(output_dir, img_id[0], img_id)
+        output_img_name = '{}/{}.jpeg'.format(output_dir, img_id)
         img_url = '{}/{}'.format(BIODIVERSITY_LIB_URL, img_id)
 
         # Only download if the image doesn't exist yet.
