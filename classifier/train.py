@@ -7,19 +7,16 @@ import torch
 import torchvision
 from torch.utils.tensorboard import SummaryWriter
 
-from common import get_adversarial_example
 from common import IllustrationsDataset
-from common import Classifier
 
-EPS = 0.01
 DEVICE = 'cuda'
-#DEVICE = 'cpu'
 
 def train_binary_classifier(
     image_dir, label_file, output_file, epochs, tensorboard_path=None, pretrained_model=None
 ):
     # Set up data loading.
     train_dataset = IllustrationsDataset(image_dir, label_file, augment=True)
+    train_dataset.summary()
     train_dataloader = torch.utils.data.DataLoader(
         train_dataset, batch_size=64, shuffle=True, num_workers=0
     )
@@ -30,18 +27,17 @@ def train_binary_classifier(
 
     # Set up model.
     device = torch.device(DEVICE)
-    classifier = Classifier().to(device)
-    #classifier = torchvision.models.AlexNet(num_classes=2).to(device)
+    classifier = torchvision.models.AlexNet(num_classes=2).to(device)
     if pretrained_model:
         classifier.load_state_dict(torch.load(pretrained_model, map_location=DEVICE))
 
     # Set up optimizer.
     loss_fn = torch.nn.CrossEntropyLoss()
-    #loss_fn = torch.nn.BCELoss()
-    optimizer = torch.optim.Adam(classifier.parameters(), lr=1e-3)
+    optimizer = torch.optim.Adam(classifier.parameters(), lr=1e-4)
 
     print("Setup finished, starting training...")
 
+    writer = None
     if tensorboard_path:
         writer = SummaryWriter(tensorboard_path)
 
@@ -51,11 +47,7 @@ def train_binary_classifier(
         for img_batch, label_batch, _ in train_dataloader:
             # Move data to device used.
             img_batch = img_batch.to(device)
-            original_batch = img_batch
             label_batch = label_batch.to(device)
-
-            # Get adversarial example.
-            img_batch = get_adversarial_example(classifier, img_batch, label_batch, loss_fn, EPS).detach()
 
             # Training step.
             optimizer.zero_grad()
@@ -71,14 +63,13 @@ def train_binary_classifier(
         # Tensorboard update every epoch.
         if writer:
             writer.add_image("input", img_batch[0], e)
-            writer.add_image("original_input", original_batch[0], e)
 
         # Infer on the train set.
         preds, labels, losses = [], [], []
         for img_batch, label_batch, _ in eval_dataloader:
             optimizer.zero_grad()
             output = classifier(img_batch.to(device))
-            preds.append(output.cpu().round().detach().numpy())
+            preds.append(output.cpu().detach().numpy())
             labels.append(label_batch.cpu().detach().numpy())
             loss = loss_fn(output, label_batch.to(device)).cpu().detach().numpy()
             losses.append(loss)
@@ -97,6 +88,9 @@ def train_binary_classifier(
             writer.add_scalar("val_loss", val_loss, e)
             writer.add_scalar("train_loss", train_loss, e)
         print("Epoch {}: Accuracy {}, Loss {}".format(e, accuracy, val_loss))
+
+        if accuracy == 1.0:
+            break
 
     print("Saving model to {}.".format(output_file))
     torch.save(classifier.state_dict(), output_file)
